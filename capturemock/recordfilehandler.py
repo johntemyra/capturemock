@@ -1,5 +1,5 @@
 
-""" Very basic interface for appending to a file. Server version much more complex """ 
+""" Very basic interface for appending to a file. Server version much more complex """
 import os
 
 class RecordFileHandler(object):
@@ -21,7 +21,6 @@ class RecordFileHandler(object):
 
     def close(self):
         if self._writeFile is not None and not self._writeFile.closed:
-            self._writeFile.flush()
             self._writeFile.close()
             self._writeFile = None
 
@@ -36,16 +35,18 @@ class RecordFileHandler(object):
             if truncationPoint:
                 self._writeFile.flush()
                 self.lastTruncationPoint = os.path.getsize(self.file)
-                self.recordedSinceTruncationPoint = []                
+                self.recordedSinceTruncationPoint = []
             if self.lastTruncationPoint is not None:
                 self.recordedSinceTruncationPoint.append(text)
             self._writeFile.write(text)
             self._writeFile.flush()
-            
+
     def rerecord(self, oldText, newText):
         if self.file:
             self._ensure_open()
-            self._writeFile.truncate(self.lastTruncationPoint)
+            self._writeFile.flush()
+            self._writeFile.seek(self.lastTruncationPoint)
+            self._writeFile.truncate()
             for text in self.recordedSinceTruncationPoint:
                 self._writeFile.write(text.replace(oldText, newText))
             self._writeFile.flush()
