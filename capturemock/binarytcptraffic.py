@@ -401,22 +401,17 @@ class StructConverter:
 
     def get_data_size(self):
         size = 0
-        skip_indices = 0
         fmtToUse = self.fmt[1:]
+        countStr = ""
         for ix, char in enumerate(fmtToUse):
-            if skip_indices:
-                skip_indices -= 1
-            elif char.isdigit():
-                nextChar = fmtToUse[ix + 1]
-                if nextChar != "s":
-                    countStr = char
-                    if nextChar.isdigit():
-                        countStr += nextChar
-                    count = int(countStr)
-                    skip_indices = len(countStr)
-                    size += count
+            if char.isdigit():
+                countStr += char
             elif not char.isspace():
-                size += 1
+                if countStr and char != "s":
+                    size += int(countStr)
+                else:
+                    size += 1
+                countStr = ""
         return size
 
     def pack(self, data, index, *args):
