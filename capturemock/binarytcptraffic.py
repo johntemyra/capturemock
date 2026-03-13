@@ -487,9 +487,10 @@ class StringConverter(SequenceConverter):
         return rawBytes
 
 class ListConverter(SequenceConverter):
-    def __init__(self, lengthFmt, elementFmt, elementConverters):
+    def __init__(self, lengthFmt, lengthIsBytes, elementFmt, elementConverters):
         SequenceConverter.__init__(self, lengthFmt, elementFmt)
         self.elementConverters = elementConverters
+        self.lengthIsBytes = lengthIsBytes
 
     def unpack(self, rawBytes, offset, diag):
         list_length = self.get_sequence_length(rawBytes, offset)
@@ -517,6 +518,8 @@ class ListConverter(SequenceConverter):
         elements = data[index]
         diag.debug("packing list %s", elements)
         length = len(elements)
+        if self.lengthIsBytes:
+            length *= struct.calcsize(self.elementFmt)
         rawBytes = struct.pack(self.lengthFmt, length)
         for element in elements:
             elementIndex = 0
@@ -530,10 +533,17 @@ class ListConverter(SequenceConverter):
 
     def combine_converters(self, converters):
         if len(self.elementConverters) == 0:
-            return ListConverter(self.lengthFmt, self.elementFmt, converters)
+            return ListConverter(self.lengthFmt, self.lengthIsBytes, self.elementFmt, converters)
+        
+    def get_sequence_length(self, rawBytes, offset):
+        raw = super().get_sequence_length(rawBytes, offset)
+        if self.lengthIsBytes:
+            return raw // struct.calcsize(self.elementFmt)
+        else:
+            return raw
 
     def __repr__(self):
-        return self.__class__.__name__ + "(" + self.lengthFmt + ", " + self.elementFmt + ", " + repr(self.elementConverters) + ")"
+        return f"{self.__class__.__name__}({self.lengthFmt}, {self.lengthIsBytes}, {self.elementFmt}, {repr(self.elementConverters)})"
 
 class OptionConverter(SequenceConverter):
     def __init__(self, lengthFmt, elementFmt, optionConverters, bitTemplates):
@@ -755,9 +765,12 @@ class BinaryMessageConverter:
         curr_fmt = ""
         converters = []
         specialChars = "[]()" + cls.get_special_string_chars()
+        byte_length_flag = False
         while ix < len(fmt):
             currChar = fmt[ix]
-            if currChar in specialChars:
+            if currChar == "*":
+                byte_length_flag = True
+            elif currChar in specialChars:
                 length_fmt_ix = cls.find_length_format_index(curr_fmt)
                 prev = curr_fmt[:length_fmt_ix]
                 if prev and prev != endianchar:
@@ -771,11 +784,12 @@ class BinaryMessageConverter:
                     if fmtPart:
                         listFmt = endianchar + fmtPart
                         listConverters = cls.split_format(listFmt)
-                        converters.append(ListConverter(lengthFmt, listFmt, listConverters))
+                        converters.append(ListConverter(lengthFmt, byte_length_flag, listFmt, listConverters))
                     else:
                         # placeholder for bit templates
-                        converters.append(ListConverter(lengthFmt, "variable", []))
+                        converters.append(ListConverter(lengthFmt, byte_length_flag, "variable", []))
                     ix = closePos
+                    byte_length_flag = False
                 elif currChar == "(":
                     closePos = cls.find_close_bracket(fmt, ix, "(", ")")
                     allOptionFmt = fmt[ix + 1:closePos]
@@ -1247,7 +1261,8 @@ if __name__ == "__main__":
     #fmt = "<i[i$i[i$]i$Ii$i$i$B]"
     #fmt = "<q3Ii[i$]BHIBHIdi$i$Ii[i$i$i$Bi$Ii$i$i[i$]i$Ii$i$i$B]i[i$]i$i$I"
     #fmt = "<q3Ii[i$]i[B(x|B(x|?|b|B|h|H|i|I|q|Q|f|d|i$|128=i[])|I|B(x|?|b|B|h|H|i|I|q|Q|f|d|i$|128=i[])I)]i[B]"
-    fmt = ">2I2HII4x[3I4B]"
+    # fmt = ">2I2HII4x[3I4B]"
+    fmt = "<I I*[ d ]"
     # fmt = "<5Ii$"
     # fmt = "<Ii$i$i$2I2BH"
     # fmt = "<4I2BH2Bq2Ii$I3Bi$i$Bi$Ii$i$i[i$]i$i$i$i$i$dI"
