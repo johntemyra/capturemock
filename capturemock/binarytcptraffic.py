@@ -516,6 +516,8 @@ class ListConverter(SequenceConverter):
 
     def pack(self, data, index, diag):
         elements = data[index]
+        if elements is None: # no data
+            raise struct.error(f"No data for {self}, exiting")
         diag.debug("packing list %s", elements)
         length = len(elements)
         if self.lengthIsBytes:
